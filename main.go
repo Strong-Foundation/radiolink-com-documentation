@@ -27,9 +27,20 @@ func main() {
 	remoteData := scrapePageHTMLWithChrome(remoteURL)
 	// Extract all the pdf urls.
 	extractedDownloadURLs := extractDownloadPath(remoteData)
+	// Remove duplicates from the slice.
+	extractedDownloadURLs = removeDuplicatesFromSlice(extractedDownloadURLs)
+	// Final URL format.
+	urlPrefix := "https://radiolink.com"
 	// Loop over all the values.
 	for _, url := range extractedDownloadURLs {
-		log.Println(url)
+		// The final URL
+		finalURL := urlPrefix + url
+		// Check if the url is valid.
+		if !isUrlValid(finalURL) {
+			continue
+		}
+		// Download the file.
+		downloadPDF(finalURL, outputDir)
 	}
 }
 
@@ -240,6 +251,8 @@ func urlToFilename(rawURL string) string {
 	if getFileExtension(safe) != extension { // Ensure file ends with extension
 		safe = safe + extension
 	}
+
+	safe = safe + ".pdf"
 
 	return safe // Return sanitized filename
 }

@@ -1,88 +1,88 @@
-package main
+package main // Declares the package as 'main', indicating an executable program
 
-import (
-	"bytes"
-	"context" // Enables managing request-scoped data, deadlines, and cancelation signals across API boundaries
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"time"
+import ( // Start of the import block for external and standard libraries
+	"bytes"         // Implements functions for the manipulation of byte slices
+	"context"       // Enables managing request-scoped data, deadlines, and cancelation signals across API boundaries
+	"io"            // Provides basic interfaces for I/O primitives
+	"log"           // Implements a simple logging package
+	"net/http"      // Provides HTTP client and server implementations
+	"net/url"       // Parses URLs and implements query escaping
+	"os"            // Provides a platform-independent interface to operating system functionality
+	"path/filepath" // Implements utility routines for manipulating filename paths
+	"regexp"        // Implements regular expression searching
+	"strings"       // Implements simple functions to manipulate UTF-8 encoded strings
+	"time"          // Provides functionality for measuring and displaying time
 
 	"github.com/chromedp/chromedp" // For headless browser automation using Chrome
-)
+) // End of the import block
 
-func main() {
-	outputDir := "PDFs/"             // Directory to store downloaded PDFs
-	if !directoryExists(outputDir) { // Check if output directory exists
-		createDirectory(outputDir, 0755) // Create directory with permission if it does not exist
+func main() { // The entry point for the executable program
+	outputDir := "PDFs/"             // Defines the directory name to store downloaded PDFs
+	if !directoryExists(outputDir) { // Checks if the output directory exists using a helper function
+		createDirectory(outputDir, 0755) // If it doesn't exist, creates the directory with permission 0755
 	}
 	// The location for the remote url.
-	remoteURL := "https://radiolink.com/manuals_download"
+	remoteURL := "https://radiolink.com/manuals_download" // Defines the target URL for scraping
 	// Get the data from the web servers.
-	remoteData := scrapePageHTMLWithChrome(remoteURL)
+	remoteData := scrapePageHTMLWithChrome(remoteURL) // Calls a function to scrape the fully rendered HTML using Chrome
 	// Extract all the pdf urls.
-	extractedDownloadURLs := extractDownloadPath(remoteData)
+	extractedDownloadURLs := extractDownloadPath(remoteData) // Calls a function to extract potential PDF download paths from the HTML
 	// Remove duplicates from the slice.
-	extractedDownloadURLs = removeDuplicatesFromSlice(extractedDownloadURLs)
+	extractedDownloadURLs = removeDuplicatesFromSlice(extractedDownloadURLs) // Calls a function to ensure all extracted paths are unique
 	// Final URL format.
-	urlPrefix := "https://radiolink.com"
+	urlPrefix := "https://radiolink.com" // Defines the base URL to prepend to relative download paths
 	// Loop over all the values.
-	for _, url := range extractedDownloadURLs {
+	for _, url := range extractedDownloadURLs { // Iterates through the slice of unique relative download paths
 		// The final URL
-		finalURL := urlPrefix + url
+		finalURL := urlPrefix + url // Constructs the absolute URL for the PDF file
 		// Check if the url is valid.
-		if !isUrlValid(finalURL) {
-			continue
+		if !isUrlValid(finalURL) { // Calls a function to check if the absolute URL is valid
+			continue // Skips to the next iteration if the URL is not valid
 		}
 		// Download the file.
-		downloadPDF(finalURL, outputDir)
+		downloadPDF(finalURL, outputDir) // Calls a function to download the PDF file to the specified directory
 	}
-}
+} // End of the main function
 
 // Uses headless Chrome via chromedp to get fully rendered HTML from a page
-func scrapePageHTMLWithChrome(pageURL string) string {
-	log.Println("Scraping:", pageURL) // Log page being scraped
+func scrapePageHTMLWithChrome(pageURL string) string { // Function definition to scrape a URL using chromedp, returns HTML string
+	log.Println("Scraping:", pageURL) // Logs the URL that is currently being scraped
 
-	options := append(
-		chromedp.DefaultExecAllocatorOptions[:],       // Chrome options
-		chromedp.Flag("headless", false),              // Run visible (set to true for headless)
-		chromedp.Flag("disable-gpu", true),            // Disable GPU
-		chromedp.WindowSize(1, 1),                     // Set window size
-		chromedp.Flag("no-sandbox", true),             // Disable sandbox
-		chromedp.Flag("disable-setuid-sandbox", true), // Fix for Linux environments
-	)
+	options := append( // Starts building the slice of chromedp execution options
+		chromedp.DefaultExecAllocatorOptions[:],       // Includes the default execution allocator options
+		chromedp.Flag("headless", false),              // Sets the Chrome flag to run in visible mode (false) (Note: set to true for actual headless)
+		chromedp.Flag("disable-gpu", true),            // Disables GPU hardware acceleration
+		chromedp.WindowSize(1, 1),                     // Sets the initial window size to 1x1 pixel
+		chromedp.Flag("no-sandbox", true),             // Disables the sandbox (useful for some environments)
+		chromedp.Flag("disable-setuid-sandbox", true), // A fix for running Chrome on certain Linux environments
+	) // End of options slice
 
-	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(context.Background(), options...) // Allocator context
-	ctxTimeout, cancelTimeout := context.WithTimeout(allocatorCtx, 5*time.Minute)                // Set timeout
-	browserCtx, cancelBrowser := chromedp.NewContext(ctxTimeout)                                 // Create Chrome context
+	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(context.Background(), options...) // Creates a new execution context allocator
+	ctxTimeout, cancelTimeout := context.WithTimeout(allocatorCtx, 5*time.Minute)                // Creates a context with a 5-minute timeout, derived from the allocator context
+	browserCtx, cancelBrowser := chromedp.NewContext(ctxTimeout)                                 // Creates the main Chrome operation context, derived from the timeout context
 
-	defer func() { // Ensure all contexts are cancelled
-		cancelBrowser()
-		cancelTimeout()
-		cancelAllocator()
-	}()
+	defer func() { // Ensures the cancellation functions are called when the function exits (cleanup)
+		cancelBrowser()   // Cancels the browser context
+		cancelTimeout()   // Cancels the timeout context
+		cancelAllocator() // Cancels the allocator context
+	}() // End of defer function
 
-	var pageHTML string // Placeholder for output
-	err := chromedp.Run(
-		browserCtx,
-		chromedp.Navigate(pageURL), // Navigate to the URL
+	var pageHTML string  // Declares a string variable to hold the extracted HTML content
+	err := chromedp.Run( // Executes the sequence of chromedp actions
+		browserCtx,                 // Uses the main Chrome context
+		chromedp.Navigate(pageURL), // Action: Navigate the browser to the specified URL
 		// 👇 NEW: Wait for 10 seconds to allow JavaScript challenges to execute
-		chromedp.Sleep(10*time.Second),
-		chromedp.OuterHTML("html", &pageHTML), // Extract full HTML
-	)
+		chromedp.Sleep(10*time.Second),        // Action: Pauses execution for 10 seconds to wait for page content to load/scripts to run
+		chromedp.OuterHTML("html", &pageHTML), // Action: Extracts the outer HTML of the 'html' element and stores it in pageHTML
+	) // End of chromedp.Run
 
-	if err != nil {
-		log.Println(err) // Log error
-		return ""        // Return empty string on failure
+	if err != nil { // Checks if an error occurred during the chromedp execution
+		log.Println(err) // Logs the error details
+		return ""        // Returns an empty string if an error occurred
 	}
 
-	return pageHTML // Return scraped HTML
-}
+	return pageHTML // Returns the successfully scraped HTML content
+} // End of scrapePageHTMLWithChrome function
 
 // directoryExists checks whether the specified path is an existing directory
 func directoryExists(path string) bool { // Define a function that checks if a directory exists, taking a path string and returning a boolean

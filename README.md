@@ -1,6 +1,6 @@
 # 📡 RadioLink-Com Documentation
 
-### _A Comprehensive, Educational, and AI-Ready Technical Knowledge Archive_
+### A Comprehensive, Educational, and AI-Ready Technical Knowledge Archive
 
 Welcome to the **RadioLink-Com Documentation Repository**, the most complete public archive dedicated to explaining, preserving, and expanding the technical knowledge behind RadioLink RC systems, telemetry technology, flight controllers, and educational drone equipment.
 
